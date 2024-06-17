@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Algoritmos Genéticos API</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-image: url(https://i.pinimg.com/736x/29/56/0d/29560dc85fb523782a91c5d27c0dd3ee.jpg);
+            background-size: cover;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }        
+        header {
+            background-color: #440096;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        main {
+            display: flex;
+            flex-direction: row;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .right-panel {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background-color: #4F58B4;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            font-size: 16px;
+            color: #2F0A5B;
+        }
+        input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 15px;
+            font-size: 14px;
+            background-color: #C0C0C0;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #2F0A5B; 
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #6126AD; 
+        }
+        #result, #cities-list {
+            background-color: #4F58B4;
+            padding: 20px;
+            border-radius: 25px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            color: white;
+        }
+        #map {
+            height: 750px;
+            width: 125%;
+            border-radius: 25px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>API de Rutas con Google Maps</h1>
+    </header>
+    <main>
+        <div class="left-panel">
+            <form id="rutas-form">
+                {% csrf_token %}
+                <label for="ciudades">Ingrese las ciudades separadas por comas</label>
+                <input type="text" id="ciudades" name="ciudades" placeholder="Ciudades">
+                <label for="casetas">Ingrese el número de casetas (opcional):</label>
+                <input type="text" id="casetas" name="casetas" placeholder="Número de casetas">
+                <button id="toggleButton" type="submit">Calcular Ruta</button>
+            </form>
+            <div id="result"></div>
+            <div id="cities-list"></div>
+        </div>
+        <div class="right-panel">
+            <div id="map"></div>
+        </div>
+    </main>
+
+    <script>
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        let directionsService, directionsDisplay, map, carMarker;
+
+        function initMap() {
+            directionsService = new google.maps.DirectionsService;
+            directionsDisplay = new google.maps.DirectionsRenderer;
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 4,
+                center: {lat: 19.4326, lng: -99.1332} // Coordenadas de Ciudad de México
+            });
+
+            directionsDisplay.setMap(map);
+
+            carMarker = new google.maps.Marker({
+                map: map,
+                icon: {
+                    url: "https://img.icons8.com/color/48/000000/car.png",
+                    scaledSize: new google.maps.Size(48, 48)
+                }
+            });
+
+            document.getElementById('rutas-form').onsubmit = function(event) {
+                event.preventDefault();
+                var ciudades = document.getElementById('ciudades').value.split(',').map(s => s.trim());
+                var casetas = document.getElementById('casetas').value.trim();
+                casetas = casetas ? parseInt(casetas) : 0;
+
+                var citiesList = document.getElementById('cities-list');
+                citiesList.innerHTML = '<h3>Ciudades Ingresadas:</h3><ul>' + ciudades.map(ciudad => `<li>${ciudad}</li>`).join('') + '</ul>';
+
+                fetch('/api/genetico/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify({ciudades: ciudades, casetas: casetas})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('result').innerText = `Error: ${data.error}`;
+                    } else {
+                        var totalSeconds = data.tiempo_total;
+                        var hours = Math.floor(totalSeconds / 3600);
+                        var minutes = Math.floor((totalSeconds % 3600) / 60);
+
+                        document.getElementById('result').innerHTML = `
+                            <p><strong>Distancia Total:</strong> ${(data.distancia_total / 1000).toFixed(2)} km</p>
+                            <p><strong>Tiempo Total:</strong> ${hours} horas ${minutes} minutos</p>
+                            <p><strong>Gasolina Consumida:</strong> ${data.gasolina_consumida.toFixed(2)} litros</p>
+                            <p><strong>Costo de Gasolina:</strong> ${data.costo_gasolina.toFixed(2)}</p>
+                            <p><strong>Costo de Casetas:</strong> ${data.costo_casetas.toFixed(2)}</p>
+                        `;
+
+                        var waypoints = ciudades.slice(1, -1).map(location => ({ location, stopover: true }));
+
+                        var request = {
+                            origin: ciudades[0],
+                            destination: ciudades[ciudades.length - 1],
+                            waypoints: waypoints,
+                            travelMode: 'DRIVING'
+                        };
+
+                        directionsService.route(request, function(response, status) {
+                            if (status === 'OK') {
+                                directionsDisplay.setDirections(response);
+                                var route = response.routes[0].legs[0];
+                                var path = route.steps.map(step => step.path).flat();
+                                animateCar(path);
+                            } else {
+                                window.alert('Error al calcular la ruta: ' + status);
+                            }
+                        });
+                    }
+                });
+            };
+        }
+
+        function animateCar(path) {
+            var step = 0;
+            var numSteps = path.length;
+            var timePerStep = 50;
+
+            function moveMarker() {
+                if (step >= numSteps) {
+                    return;
+                }
+                carMarker.setPosition(path[step]);
+                step += 1;
+                setTimeout(moveMarker, timePerStep);
+            }
+
+            moveMarker();
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-a4eE0pXGufV3vD1rhmZByGSLFvzrUFQ&callback=initMap" async defer></script>
+</body>
+</html>
